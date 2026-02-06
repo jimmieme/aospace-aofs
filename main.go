@@ -31,6 +31,7 @@ package main
 import (
 	"aofs/internal/env"
 	"aofs/internal/log4bp"
+	"aofs/repository/bpredis"
 	"aofs/repository/dbutils"
 	"aofs/repository/storage"
 	"aofs/routers/api"
@@ -38,11 +39,10 @@ import (
 	"aofs/routers/routers"
 	"aofs/services/multipart"
 	"aofs/services/recycled"
-	"fmt"
-
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
@@ -70,30 +70,65 @@ func NewFileAPI() *FileAPI {
 	}
 }
 
-func Init() {
-	dbutils.Init()
-
-	if err := storage.Init(dbutils.NewBETagIndexer()); err != nil {
-		fileapi.Logger.LogE().Err(err).Msg("failed to storage.Init")
-		os.Exit(2)
+func Init() error {
+	if err := dbutils.Init(); err != nil {
+		return err
 	}
 
+	if err := storage.Init(dbutils.NewBETagIndexer()); err != nil {
+		return err
+	}
 
 	api.Init()
 	recycled.Init() //回收站初始化
 	multipart.Init()
+	return nil
+}
+
+func bootstrapWithRetry(maxAttempts int, interval time.Duration) error {
+	var lastErr error
+	for i := 1; i <= maxAttempts; i++ {
+		fileapi.Logger.LogI().
+			Int("attempt", i).
+			Int("max_attempts", maxAttempts).
+			Msg("bootstrap attempt started")
+		if err := bpredis.Init(); err != nil {
+			lastErr = err
+		} else if err := Init(); err != nil {
+			lastErr = err
+		} else {
+			if i > 1 {
+				fileapi.Logger.LogI().Int("attempt", i).Msg("bootstrap recovered after retry")
+			}
+			fileapi.Logger.LogI().Int("attempt", i).Msg("bootstrap attempt succeeded")
+			return nil
+		}
+
+		fileapi.Logger.LogW().
+			Err(lastErr).
+			Int("attempt", i).
+			Int("max_attempts", maxAttempts).
+			Int64("retry_interval_sec", int64(interval/time.Second)).
+			Msg("bootstrap failed, retrying")
+		time.Sleep(interval)
+	}
+	return lastErr
 }
 
 func main() {
 	fileapi = NewFileAPI()
 	fileapi.Route.Use(gin.Recovery())
 	fileapi.Route.MaxMultipartMemory = 100 * 1024 * 1024
-	Init()
+
+	if err := bootstrapWithRetry(60, 2*time.Second); err != nil {
+		fileapi.Logger.LogE().Err(err).Msg("failed to bootstrap fileapi after retries")
+		os.Exit(2)
+	}
 
 	go func() {
 		err := fileapi.Route.Run(":2001")
 		if err != nil {
-			fmt.Println("run err:", err)
+			fileapi.Logger.LogE().Err(err).Msg("failed to run fileapi server on :2001")
 		}
 	}()
 
@@ -103,8 +138,6 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, os.Interrupt)
 	<-quit
 
-
 	fileapi.Logger.LogI().Msg("receive exit signal ,exit....")
-
 
 }

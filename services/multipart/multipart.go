@@ -32,7 +32,6 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -150,7 +149,7 @@ func (task *MultipartTask) Complete() error {
 	} else {
 		task.betagPath = fpath
 		if err := os.Remove(filepath.Join(task.MPDataPath, task.UploadId+".hash")); err != nil {
-			log.Println("failed to remove hash:", err)
+			logger.LogW().Err(err).Str("upload_id", task.UploadId).Msg("failed to remove hash file")
 		}
 		os.Remove(filepath.Join(getMPMetaPath(), task.UploadId+".mp"))
 		return nil
@@ -207,7 +206,7 @@ func (task *MultipartTask) removeFromUploading(start int64, lock bool) {
 	}
 }
 
-//合并当前完成的分段，返回需要计算hash的分段, 支持随机分片长度。
+// 合并当前完成的分段，返回需要计算hash的分段, 支持随机分片长度。
 func (task *MultipartTask) mergeToUploaded(start, end int64, lock bool) []int64 {
 	ret := []int64{}
 	if lock {
@@ -257,7 +256,7 @@ func (task *MultipartTask) splitPart(start, end int64) []proto.Part {
 	return parts
 }
 
-//写文件，如果本次分片包含完整的hash计算端，则在内存完成计算；否则不计算，留待后续合并再计算
+// 写文件，如果本次分片包含完整的hash计算端，则在内存完成计算；否则不计算，留待后续合并再计算
 func (task *MultipartTask) writeDatafile(start, end int64, r io.Reader) (map[int64][]byte, error) {
 
 	w, err := os.OpenFile(filepath.Join(task.MPDataPath, task.UploadId+".data"), os.O_WRONLY, os.ModePerm)
@@ -338,7 +337,7 @@ func (task *MultipartTask) writeMpfile() error {
 
 }
 
-//写入第几段hash， 如果hash值为空，则从文件读取
+// 写入第几段hash， 如果hash值为空，则从文件读取
 func (task *MultipartTask) writeHashfile(posHash map[int64][]byte) error {
 	//写hash文件
 	hashfile, err := os.OpenFile(filepath.Join(task.MPDataPath, task.UploadId+".hash"), os.O_WRONLY, os.ModePerm)
@@ -461,7 +460,7 @@ func (mtm *multipartTaskMng) clearExpiredTask(path string, info fs.FileInfo, err
 	if !info.IsDir() && filepath.Ext(info.Name()) == ".mp" && int(time.Now().Unix()-info.ModTime().Unix()) > env.MULTIPART_TASK_LRU_SECOND {
 		etag := info.Name()[:len(info.Name())-3]
 		mtm.DeleteTask(etag)
-		log.Println("delete task files:", etag)
+		logger.LogI().Str("etag", etag).Msg("delete multipart task files")
 	}
 	return nil
 }

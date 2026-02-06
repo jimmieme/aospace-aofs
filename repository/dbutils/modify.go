@@ -46,10 +46,9 @@ func RenameFiles(userId proto.UserIdType, uuid string, name string) (affect int6
 		}
 		// 拼接sql
 		sql := fmt.Sprintf("UPDATE \"aofs_file_infos\" SET path = replace(path,'%s','%s') where user_id=%d AND trashed = 0 AND path like '%s'", originPath, parentPath.Path+name+"/", userId, originPath+"%")
-		fmt.Println(sql)
+		logdb.LogD().Str("sql", sql).Msg("rename folder descendants path")
 		//更新该文件夹下所有文件的path
 		isSubFileExist := tx.Model(&proto.FileInfo{}).Where("user_id = ? AND path = ? AND trashed = ?", userId, originPath, 0).First(&proto.FileInfo{})
-
 
 		if isSubFileExist.RowsAffected != 0 {
 			res := tx.Exec(sql)
@@ -65,15 +64,12 @@ func RenameFiles(userId proto.UserIdType, uuid string, name string) (affect int6
 		tx.Commit()
 		return affect, nil
 	}
-
 }
-
 
 func UpdateOperationTime(uuid string) error {
 	err := db.Model(&proto.FileInfo{}).Where("uuid = ?", uuid).Update("operation_time", time.Now().UnixNano()/1e6).Error
 	return err
 }
-
 
 func UpdateFileInfoExt(charset []byte, uuid string) error {
 	err := db.Model(&proto.FileInfo{}).Where("uuid = ? ", uuid).Update("ext", charset).Error

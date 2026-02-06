@@ -33,7 +33,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -42,6 +41,7 @@ import (
 )
 
 var route = routers.InitRoute()
+var testBootstrapErr error
 
 func TGet(uri string, header http.Header) *httptest.ResponseRecorder {
 	// 构造get请求
@@ -77,7 +77,7 @@ func TPost(uri string, header http.Header, r io.Reader) *httptest.ResponseRecord
 	return w
 }
 
-//解析响应体到标准消息形式
+// 解析响应体到标准消息形式
 func TParseRsp(response *httptest.ResponseRecorder, rsp *proto.Rsp, assert *assert.Assertions) {
 	if response.Code < 200 || response.Code > 599 {
 		assert.FailNowf("http code err", "response.Code:%v, expected: 200", response.Code)
@@ -96,7 +96,7 @@ func TParseRsp(response *httptest.ResponseRecorder, rsp *proto.Rsp, assert *asse
 	}
 }
 
-//获取url的包体数据，就像下载文件一样
+// 获取url的包体数据，就像下载文件一样
 func TGetFile(uri string, t *testing.T) []byte {
 	return TGetFileRange(uri, nil, t)
 }
@@ -130,13 +130,13 @@ func TGetFileRange(uri string, part *proto.Part, t *testing.T) []byte {
 	return data
 }
 
-//直接根据(GET)url到协议的标准响应json对应的响应结果
+// 直接根据(GET)url到协议的标准响应json对应的响应结果
 func TGetRsp(url string, rsp *proto.Rsp, assert *assert.Assertions) {
 	response := TGet(url, nil)
 	TParseRsp(response, rsp, assert)
 }
 
-//直接POST并得到标准协议结果, r 支持 io.Reader 或其它类型，其它类型会转成json格式上传
+// 直接POST并得到标准协议结果, r 支持 io.Reader 或其它类型，其它类型会转成json格式上传
 func TPostRsp(uri string, header http.Header, r interface{}, rsp *proto.Rsp, assert *assert.Assertions) {
 	if header == nil {
 		header = http.Header{}
@@ -159,7 +159,7 @@ func TPostRsp(uri string, header http.Header, r interface{}, rsp *proto.Rsp, ass
 	TParseRsp(response, rsp, assert)
 }
 
-//计算md5
+// 计算md5
 func TMd5sum(d []byte) string {
 	ms := md5.Sum(d)
 	return hex.EncodeToString(ms[:])
@@ -168,11 +168,16 @@ func TMd5sum(d []byte) string {
 func init() {
 	log4bp.Logger.Level(zerolog.DebugLevel)
 
-	dbutils.Init()
+	if err := dbutils.Init(); err != nil {
+		testBootstrapErr = fmt.Errorf("failed to init dbutils in tests: %w", err)
+		log.Println(testBootstrapErr)
+		return
+	}
 
 	if err := storage.Init(dbutils.NewBETagIndexer()); err != nil {
-		fmt.Println("failed to storage.Init")
-		os.Exit(2)
+		testBootstrapErr = fmt.Errorf("failed to storage.Init: %w", err)
+		log.Println(testBootstrapErr)
+		return
 	}
 
 	api.Init()

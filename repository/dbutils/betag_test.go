@@ -135,6 +135,14 @@ func testBETagIndexDelete(t *testing.T) {
 }
 
 func TestBETagIndex(t *testing.T) {
+	if db == nil {
+		t.Skip("skip BETagIndex integration test: database is not initialized")
+	}
+	if sqlDB, err := db.DB(); err != nil {
+		t.Skipf("skip BETagIndex integration test: db handle unavailable: %v", err)
+	} else if err := sqlDB.Ping(); err != nil {
+		t.Skipf("skip BETagIndex integration test: database unreachable: %v", err)
+	}
 	testBETagIndexAdd(t)
 	testBETagIndexGet(t)
 	testBETagIndexDelete(t)

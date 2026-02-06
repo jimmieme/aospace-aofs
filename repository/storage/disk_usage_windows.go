@@ -15,7 +15,6 @@
 package storage
 
 import (
-	"log"
 	"syscall"
 	"unsafe"
 )
@@ -41,9 +40,6 @@ func DiskUsage(path string) (disk DiskStatus) {
 		uintptr(unsafe.Pointer(&lpTotalNumberOfBytes)),
 		uintptr(unsafe.Pointer(&lpTotalNumberOfFreeBytes)), 0, 0)
 
-	log.Printf("Available  %db", lpFreeBytesAvailable)
-	log.Printf("Total      %db", lpTotalNumberOfBytes)
-	log.Printf("Free       %db", lpTotalNumberOfFreeBytes)
 	disk.Free = uint64(lpTotalNumberOfFreeBytes)
 	disk.All = uint64(lpTotalNumberOfBytes)
 	disk.Used = uint64(lpTotalNumberOfBytes - lpTotalNumberOfFreeBytes)

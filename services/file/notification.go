@@ -15,17 +15,22 @@
 package file
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"aofs/internal/proto"
 	"aofs/repository/bpredis"
 	"aofs/repository/dbutils"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
-var redis = bpredis.GetRedis()
-
 func PushChanges(optType string, userId proto.UserIdType, uuids []string) error {
+	redis := bpredis.GetRedis()
+	if redis == nil {
+		return fmt.Errorf("redis client not initialized")
+	}
+
 	var changeUuids []string
 	files, err := dbutils.GetFilesInUuids(userId, uuids)
 	if err != nil {

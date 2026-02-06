@@ -27,7 +27,7 @@ func InitRoute() *gin.Engine {
 	route := gin.New()
 
 	//内部接口，不需要放到路由表中
-	route.Use(middleware.LoggerHandler(), middleware.InitSession())
+	route.Use(gin.Recovery(), middleware.LoggerHandler(), middleware.InitSession())
 
 	inner := route.Group("/space/v1/api/inner")
 	{

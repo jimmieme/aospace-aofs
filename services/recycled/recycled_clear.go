@@ -83,11 +83,15 @@ func DoClearRecycledFile(file proto.FileInfo) error {
 	} else if sharCnt <= 1 {
 		stor.Del(env.NORMAL_BUCKET, file.BETag)
 		redis := bpredis.GetRedis()
-		if used, err := redis.GetInt64(bpredis.UsedSpace + strconv.Itoa(int(file.UserId))); err != nil {
-			usedSpace, _ := dbutils.GetUsedSpaceByUser(file.UserId)
-			redis.Set(bpredis.UsedSpace+strconv.Itoa(int(file.UserId)), usedSpace, 0)
+		if redis != nil {
+			if used, err := redis.GetInt64(bpredis.UsedSpace + strconv.Itoa(int(file.UserId))); err != nil {
+				usedSpace, _ := dbutils.GetUsedSpaceByUser(file.UserId)
+				redis.Set(bpredis.UsedSpace+strconv.Itoa(int(file.UserId)), usedSpace, 0)
+			} else {
+				redis.Set(bpredis.UsedSpace+strconv.Itoa(int(file.UserId)), used-file.Size, 0)
+			}
 		} else {
-			redis.Set(bpredis.UsedSpace+strconv.Itoa(int(file.UserId)), used-file.Size, 0)
+			logger.LogW().Int("user_id", int(file.UserId)).Msg("skip used-space redis update because redis client is unavailable")
 		}
 	} else {
 		logger.LogW().Msg("there is a same betag file,cancel clear real file")

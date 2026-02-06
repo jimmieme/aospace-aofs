@@ -67,15 +67,24 @@ func CreateMultipartTask(c *gin.Context) {
 		return
 	}
 
-
 	spaceLimit := c.Query("spaceLimit")
 
 	spaceLimitInt, _ := strconv.Atoi(spaceLimit)
-	redis := bpredis.GetRedis()
 	if spaceLimitInt != 0 {
 		// 在线试用用户容量判断
-		usedStorage, err := redis.GetInt64(bpredis.UsedSpace + strconv.Itoa(int(ctx.GetUserId())))
-		if err != nil {
+		var usedStorage int64
+		redis := bpredis.GetRedis()
+		if redis != nil {
+			var err error
+			usedStorage, err = redis.GetInt64(bpredis.UsedSpace + strconv.Itoa(int(ctx.GetUserId())))
+			if err != nil {
+				usedStorage, err = dbutils.GetUsedSpaceByUser(ctx.GetUserId())
+				if err != nil {
+					logger.LogE().Err(err).Msg("GetUsedSpaceByUser error")
+				}
+			}
+		} else {
+			var err error
 			usedStorage, err = dbutils.GetUsedSpaceByUser(ctx.GetUserId())
 			if err != nil {
 				logger.LogE().Err(err).Msg("GetUsedSpaceByUser error")
@@ -276,7 +285,6 @@ func UploadPart(c *gin.Context) {
 		return
 	}
 
-
 	//进行任务上传
 	if code, err := task.Upload(req.Start, req.End, c.Request.Body); err != nil {
 		ctx.SendErr(code, err)
@@ -326,10 +334,14 @@ func CompleteMultipartTask(c *gin.Context) {
 		ctx.SendErr(proto.CodeMultipartTaskCompleteErr, err)
 		return
 	} else {
-		if used, err := redis.GetInt64(bpredis.UsedSpace + strconv.Itoa(int(ctx.GetUserId()))); err != nil {
-			redis.Set(bpredis.UsedSpace+strconv.Itoa(int(ctx.GetUserId())), task.Param.Size, 0)
+		if redis != nil {
+			if used, err := redis.GetInt64(bpredis.UsedSpace + strconv.Itoa(int(ctx.GetUserId()))); err != nil {
+				redis.Set(bpredis.UsedSpace+strconv.Itoa(int(ctx.GetUserId())), task.Param.Size, 0)
+			} else {
+				redis.Set(bpredis.UsedSpace+strconv.Itoa(int(ctx.GetUserId())), used+task.Param.Size, 0)
+			}
 		} else {
-			redis.Set(bpredis.UsedSpace+strconv.Itoa(int(ctx.GetUserId())), used+task.Param.Size, 0)
+			logger.LogW().Msg("skip used-space redis update because redis client is unavailable")
 		}
 
 		rsp, err = multipart.InsertIndex(ctx, task.Param, true, task)

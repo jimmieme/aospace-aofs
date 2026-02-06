@@ -61,7 +61,7 @@ type multiDisk struct {
 
 var md multiDisk
 
-//初始化目录
+// 初始化目录
 func (m *multiDisk) Init(idx Indexer) error {
 	m.indexer = idx
 	m.mapDisk = make(map[int]string, 5)
@@ -83,7 +83,7 @@ func (m *multiDisk) Init(idx Indexer) error {
 		}
 	}
 
-	fmt.Println("dirs:", m.mapDisk)
+	logger.LogI().Interface("dirs", m.mapDisk).Msg("disk map initialized")
 	return nil
 }
 
@@ -271,7 +271,7 @@ func (m *multiDisk) Put(bucket string, key string, r io.Reader, size int64) erro
 	filepath := filepath.Join(dir, key)
 	if w, err := os.OpenFile(filepath+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.ModePerm); err != nil {
 		if os.IsExist(err) {
-			fmt.Println(filepath+".tmp", err)
+			logger.LogE().Err(err).Str("tmp_file", filepath+".tmp").Msg("failed to create temp file")
 			return nil //已经存在，直接认为成功
 		} else {
 			logger.LogE().Msg(fmt.Sprintf("open file:%v", err))

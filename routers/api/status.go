@@ -15,7 +15,6 @@
 package api
 
 import (
-	"aofs/internal/bpctx"
 	"aofs/internal/proto"
 
 	"github.com/gin-gonic/gin"
@@ -27,18 +26,16 @@ import (
 // @Tags ServerStatus
 // @Accept application/json
 // @Produce application/json
-// @Param userId query string true "user id"
+// @Param userId query string false "user id"
 // @Success 200 {object} proto.Rsp{results=proto.StatusRsp} "success"
 // @Router /space/v1/api/status [GET]
 func Status(c *gin.Context) {
-
-	ctx := bpctx.NewCtx(c)
-
 	var statusRsp proto.StatusRsp
-
-	defer ctx.LogI("get status", nil)
-
 	statusRsp.Status = "ok"
-	ctx.SendOk(&statusRsp)
+	c.JSON(200, proto.Rsp{
+		Code:    proto.CodeOk,
+		Message: proto.GetMessageByCode(proto.CodeOk),
+		Body:    &statusRsp,
+	})
 
 }
