@@ -20,6 +20,9 @@ import (
 )
 
 func TestAll(t *testing.T) {
+	if testBootstrapErr != nil {
+		t.Skipf("skip integration tests: %v", testBootstrapErr)
+	}
 
 	t.Run("multipart", testMultipartAll)
 

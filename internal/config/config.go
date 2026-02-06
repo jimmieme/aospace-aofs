@@ -17,11 +17,12 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
-//环境变量不区分大小写
+// 环境变量不区分大小写
 func ReadString(key string, def string) string {
-	if v, ok := os.LookupEnv(key); ok {
+	if v, ok := lookupEnvFold(key); ok {
 		return v
 	} else {
 		return def
@@ -29,7 +30,7 @@ func ReadString(key string, def string) string {
 }
 
 func ReadBool(key string, def bool) bool {
-	if v, ok := os.LookupEnv(key); ok {
+	if v, ok := lookupEnvFold(key); ok {
 		return v == "1"
 	} else {
 		return def
@@ -37,7 +38,7 @@ func ReadBool(key string, def bool) bool {
 }
 
 func ReadInt(key string, def int) int {
-	if v, ok := os.LookupEnv(key); ok {
+	if v, ok := lookupEnvFold(key); ok {
 		if intV, err := strconv.Atoi(v); err == nil {
 			return intV
 		}
@@ -46,10 +47,27 @@ func ReadInt(key string, def int) int {
 }
 
 func ReadInt64(key string, def int64) int64 {
-	if v, ok := os.LookupEnv(key); ok {
+	if v, ok := lookupEnvFold(key); ok {
 		if intV, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return intV
 		}
 	}
 	return def
+}
+
+func lookupEnvFold(key string) (string, bool) {
+	if v, ok := os.LookupEnv(key); ok {
+		return v, true
+	}
+
+	for _, kv := range os.Environ() {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.EqualFold(parts[0], key) {
+			return parts[1], true
+		}
+	}
+	return "", false
 }

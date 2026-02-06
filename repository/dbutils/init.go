@@ -87,17 +87,18 @@ func AccountSchemaConn(conf *DBConfig) *gorm.DB {
 	return db2
 }
 
-
-func CreateTable(table interface{}) {
-	err := db.AutoMigrate(table)
-	if err != nil {
-		logdb.LogF().Err(err).Msg("failed to create table")
-		panic(any(err))
+func CreateTable(table interface{}) error {
+	if db == nil {
+		return fmt.Errorf("file database is not initialized")
 	}
+	if err := db.AutoMigrate(table); err != nil {
+		return err
+	}
+	return nil
 }
 
-func Init() {
-	createTables()
+func Init() error {
+	return createTables()
 }
 
 func InitUser(userId proto.UserIdType) {
@@ -214,7 +215,6 @@ func VerifyInit(uid proto.UserIdType, name string, path string, info proto.FileI
 	}
 }
 
-
 func GetFileDB() *gorm.DB {
 	return db
 }
@@ -222,7 +222,7 @@ func GetFileDB() *gorm.DB {
 func GetAccountDB() *gorm.DB {
 	return db2
 }
-func createTables() {
+func createTables() error {
 	fileConnConfig := &DBConfig{
 		Host:     env.SQL_HOST,
 		Port:     env.SQL_PORT,
@@ -242,14 +242,35 @@ func createTables() {
 	}
 
 	db = FileSchemaConn(fileConnConfig)
+	if db == nil {
+		return fmt.Errorf("failed to connect file database: %v:%d/%v", env.SQL_HOST, env.SQL_PORT, env.SQL_DATABASE)
+	}
 	db2 = AccountSchemaConn(accountConnConfig)
-	geodb, _ = db.DB()
+	if db2 == nil {
+		return fmt.Errorf("failed to connect account database: %v:%d/account", env.SQL_HOST, env.SQL_PORT)
+	}
+
+	var err error
+	geodb, err = db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to open sql db from gorm: %w", err)
+	}
 
 	// 建表
 	logdb.LogI().Msg(fmt.Sprintf("Connected Database:%v:%d/%v", env.SQL_HOST, env.SQL_PORT, env.SQL_DATABASE))
-	CreateTable(proto.Setting{})
-	CreateTable(proto.BETagInfo{})
-	CreateTable(proto.FileInfo{})
-	CreateTable(proto.SyncInfo{})
+	if err := CreateTable(proto.Setting{}); err != nil {
+		return fmt.Errorf("failed to create Setting table: %w", err)
+	}
+	if err := CreateTable(proto.BETagInfo{}); err != nil {
+		return fmt.Errorf("failed to create BETagInfo table: %w", err)
+	}
+	if err := CreateTable(proto.FileInfo{}); err != nil {
+		return fmt.Errorf("failed to create FileInfo table: %w", err)
+	}
+	if err := CreateTable(proto.SyncInfo{}); err != nil {
+		return fmt.Errorf("failed to create SyncInfo table: %w", err)
+	}
+
+	return nil
 
 }

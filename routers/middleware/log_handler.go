@@ -15,35 +15,52 @@
 package middleware
 
 import (
-	"fmt"
-	"github.com/gin-gonic/gin"
+	"aofs/internal/log4bp"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
-//FormatGinLog 日志格式化
+var httpLogger = log4bp.New("", gin.Mode())
+
 func LoggerHandler() gin.HandlerFunc {
-
-	var statusColor, resetColor, level string
-	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-
-		if param.IsOutputColor() {
-			statusColor = param.StatusCodeColor()
-			resetColor = param.ResetColor()
+	return func(c *gin.Context) {
+		start := c.Request.URL.Path
+		if c.Request.URL.RawQuery != "" {
+			start += "?" + c.Request.URL.RawQuery
 		}
-		if param.StatusCode >= 300 {
-			level = "error"
-		} else {
-			level = "info"
+
+		reqId := c.GetHeader("Request-Id")
+		if reqId == "" {
+			reqId = c.GetHeader("X-Request-Id")
 		}
-		return fmt.Sprintf("{\"level\":\"%s\",\"timestamp\":%s,\"client\":\"%s\",\"method\":\"%s\",\"path\":\"%s\",\"request.proto\":\"%s\",\"code\":\"%s %3d %s\",\"latency\":\"%s\"}\n",
-			level,
-			param.TimeStamp.Format(time.RFC3339),
-			param.ClientIP,
-			param.Method,
-			param.Path,
-			param.Request.Proto,
-			statusColor, param.StatusCode, resetColor,
-			param.Latency,
-		)
-	})
+
+		t0 := time.Now()
+		c.Next()
+
+		latency := time.Since(t0).Milliseconds()
+		status := c.Writer.Status()
+		evt := httpLogger.LogI()
+		if status >= 500 {
+			evt = httpLogger.LogE()
+		} else if status >= 400 {
+			evt = httpLogger.LogW()
+		}
+
+		evt.Str("method", c.Request.Method).
+			Str("path", start).
+			Int("status", status).
+			Int64("latency_ms", latency).
+			Str("client_ip", c.ClientIP()).
+			Str("request_id", reqId).
+			Str("proto", c.Request.Proto).
+			Str("user_agent", c.Request.UserAgent()).
+			Int("size", c.Writer.Size())
+
+		if errMsg := c.Errors.String(); errMsg != "" {
+			evt.Str("errors", errMsg)
+		}
+
+		evt.Msg("http request")
+	}
 }

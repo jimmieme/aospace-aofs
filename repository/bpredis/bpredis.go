@@ -18,6 +18,9 @@ import (
 	"aofs/internal/env"
 	"aofs/internal/log4bp"
 	"fmt"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,9 +28,32 @@ import (
 )
 
 var g *bpRedis
+var mu sync.Mutex
 
 func init() {
-	Init()
+	if isTestProcess() {
+		return
+	}
+	if err := Init(); err != nil {
+		log4bp.New("", gin.Mode()).
+			LogW().
+			Err(err).
+			Str("addr", env.REDIS_URL).
+			Int("db", env.REDIS_DB).
+			Msg("redis init failed during package init, will retry lazily")
+	}
+}
+
+func isTestProcess() bool {
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, "-test.") || strings.HasPrefix(arg, "-test=") {
+			return true
+		}
+	}
+	if len(os.Args) > 0 && strings.HasSuffix(os.Args[0], ".test") {
+		return true
+	}
+	return false
 }
 
 type BpRediser interface {
@@ -41,6 +67,11 @@ type BpRediser interface {
 }
 
 func GetRedis() BpRediser {
+	if g == nil {
+		if err := Init(); err != nil {
+			return nil
+		}
+	}
 	return g
 }
 
@@ -55,7 +86,14 @@ func (br *bpRedis) Close() {
 }
 
 func Init() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if g != nil {
+		return nil
+	}
+
 	var err error
+	log := log4bp.New("", gin.Mode())
 	client := redis.NewClient(&redis.Options{
 		Addr:     env.REDIS_URL,  // redis地址
 		Password: env.REDIS_PASS, // redis密码，没有则留空
@@ -63,19 +101,18 @@ func Init() error {
 	})
 	for i := 0; i < 10; i++ {
 		if _, err = client.Ping().Result(); err != nil {
-			//logger.LogW().Msg(fmt.Sprintf("failed to connect to redis,err: %v", err))
-			fmt.Println("failed to connect to redis", err)
+			log.LogW().Err(err).Int("retry", i+1).Msg("failed to connect to redis")
 
 			time.Sleep(time.Second)
 		} else {
-			//br.Logger.LogI().Msg(fmt.Sprintf("Connected to redis:%v", env.REDIS_DB))
-			fmt.Println(fmt.Sprintf("Connected to redis:%v", env.REDIS_DB))
+			log.LogI().Int("db", env.REDIS_DB).Str("addr", env.REDIS_URL).Msg("connected to redis")
 			break
 		}
 	}
 
 	if err != nil {
-		panic(err)
+		log.LogE().Err(err).Int("db", env.REDIS_DB).Str("addr", env.REDIS_URL).Msg("redis init failed after retries")
+		return fmt.Errorf("failed to connect redis: %w", err)
 	}
 
 	g = &bpRedis{Client: client,
